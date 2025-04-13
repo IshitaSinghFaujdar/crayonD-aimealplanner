@@ -1,10 +1,13 @@
 from google import genai
 from google.genai import types
+from fastapi import FastAPI
 import numpy as np
 import os
 from typing import List, Tuple
-
+from fastapi.concurrency import run_in_threadpool
 client= genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))  # Set env var
+app = FastAPI()
+
 
 # Predefined preference labels and matching phrases
 PREFERENCE_LABELS = {

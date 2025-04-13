@@ -33,6 +33,7 @@ def test_quick_meal_finder():
     print(f"User Input: {user_input}")
     result = quick_meal_finder(user_context)
     print(f"Quick Meal Finder Results: {result}")
+    print("-" * 40)
 
 def test_meal_planner():
     print("Testing Meal Planner...")
@@ -40,6 +41,7 @@ def test_meal_planner():
     print(f"User Input: {user_input}")
     result = get_meal_plan(user_context)
     print(f"Meal Planner Results: {result}")
+    print("-" * 40)
 
 def test_substitute_finder():
     print("Testing Substitute Finder...")
@@ -55,6 +57,7 @@ def test_substitute_finder():
     # Get substitute suggestions
     result = get_substitute_suggestions(ingredient, reason)
     print(f"Substitute Suggestions: {result}")
+    print("-" * 40)
 
 def test_food_health_explainer():
     print("Testing Food Health Explainer...")
@@ -65,6 +68,7 @@ def test_food_health_explainer():
     # Get health explanation
     result = food_health_explainer("avocado", "PCOD")
     print(f"Food Health Explanation: {result}")
+    print("-" * 40)
 
 def test_extract_ingredient_and_reason():
     print("Testing Extract Ingredient and Reason...")
@@ -94,25 +98,17 @@ def test_extract_ingredient_and_reason():
     print(f"User Input: {user_input_4}")
     ingredient_4, reason_4 = extract_ingredient_and_reason(user_input_4)
     print(f"Extracted Ingredient: {ingredient_4}, Extracted Reason: {reason_4}")
+    print("-" * 40)
 
 def main():
     print("Debugging Chatbot Functionalities")
 
     # Run tests for each function
     test_quick_meal_finder()
-    print("-" * 40)
-    
     test_meal_planner()
-    print("-" * 40)
-    
     test_substitute_finder()
-    print("-" * 40)
-    
     test_food_health_explainer()
-    print("-" * 40)
-    
     test_extract_ingredient_and_reason()
-    print("-" * 40)
 
 if __name__ == "__main__":
     main()

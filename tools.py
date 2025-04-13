@@ -7,43 +7,85 @@ import requests
 import json
 from preference_matcher import get_embedding,cosine_similarity
 from typing import Tuple
-
+from config import SUPABASE_KEY,SUPABASE_URL,GOOGLE_API_KEY,SPOONACULAR_API_KEY
 # Initialize API Keys
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 model = genai.GenerativeModel("gemini-1.5-pro-002")
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 BASE_URL = "https://api.spoonacular.com"
-SPOONACULAR_API_KEY=os.getenv("SPOONACULAR_API_KEY")
 
-def quick_meal_finder(preferences):
+def detect_tool_llm(prompt: str, context: str) -> str:
+    system_prompt = """
+You are an intelligent tool router for a chatbot. Based on user input and recent context, respond with one of the following tools ONLY:
+- meal_planner
+- substitute_finder
+- quick_meal_finder
+- food_health_explainer
+- chat
+
+Return ONLY the tool name. Do NOT include explanations.
+"""
+    full_prompt = f"{system_prompt}\nContext:\n{context}\n\nUser Input:\n{prompt}"
+    try:
+        response = model.generate_content(full_prompt)
+        return response.text.strip().lower()
+    except Exception as e:
+        print("Tool detection error:", e)
+        return "chat"
+
+
+def quick_meal_finder(user_context):
+    print("Fetching quick meal suggestions...")
+
+    # Build query for Spoonacular API with user preferences
+    url = f"{BASE_URL}/recipes/complexSearch"
     params = {
-        "apiKey": SPOONACULAR_API_KEY,
+        "includeIngredients": ",".join(user_context["includeIngredients"]),
+        "diet": ",".join(user_context["diet"]),
+        "maxReadyTime": user_context["maxReadyTime"],
+        "excludeIngredients": ",".join(user_context["exclude"]),
+        "targetCalories": user_context["targetCalories"],
         "number": 3,
+        "apiKey": SPOONACULAR_API_KEY
     }
-    if "includeIngredients" in preferences:
-        params["includeIngredients"] = ",".join(preferences["includeIngredients"])
-    if "diet" in preferences:
-        params["diet"] = preferences["diet"][0]  # Assuming one diet preference
-    if "maxReadyTime" in preferences:
-        params["maxReadyTime"] = preferences["maxReadyTime"]
-
-    response = requests.get(f"{BASE_URL}/recipes/complexSearch", params=params)
+    print("\nFetching recipes.")
+    response = requests.get(url, params=params)
     if response.status_code == 200:
-        recipes = response.json().get("results", [])
-        return format_quick_meals(recipes)
+        meal_data = response.json().get('results', [])
+        recipes = []
+        print("\nRecieved recipes.")
+
+        # Get full details of each recipe
+        for recipe in meal_data:
+            recipe_id = recipe["id"]
+            recipe_url = f"{BASE_URL}/recipes/{recipe_id}/information"
+            recipe_details = requests.get(recipe_url, params={"apiKey": SPOONACULAR_API_KEY}).json()
+            print("\nfetching full recipe.")
+            # Format the recipe details
+            formatted_recipe = {
+                "title": recipe_details["title"],
+                "image": recipe_details["image"],
+                "ingredients": [ingredient["name"] for ingredient in recipe_details["extendedIngredients"]],
+                "instructions": recipe_details["instructions"]
+            }
+            print("formatting..")
+            recipes.append(formatted_recipe)
+
+        return recipes
     else:
-        return f"❌ Failed to find quick meals: {response.text}"
+        return {"error": "Failed to fetch meal suggestions."}
+
+
 
 def format_quick_meals(recipes):
     if not recipes:
         return "😔 No meals found for your criteria."
     output = "⏱️ **Quick Meal Suggestions**:\n"
     for r in recipes:
-        output += f"- 🍲 {r['title']} (ID: {r['id']})\n"
+        output += f"- 🍲 {r['title']} (ID: {r['id']}) - [View Recipe](https://spoonacular.com/recipes/{r['id']})\n"
     output += "\n💡 Use the recipe ID to fetch full instructions if needed."
     return output
+
 
 
 def food_health_explainer(food_description, health_context):
@@ -64,42 +106,39 @@ Include:
         return f"❌ Failed to explain food health context: {e}"
 
 # Call Spoonacular Meal Planner API
-def get_meal_plan(preferences):
+def get_meal_plan(user_context):
+    print("Fetching weekly meal plan...")
+
+    url = f"{BASE_URL}/mealplanner/generate"
     params = {
         "timeFrame": "week",
+        "diet": ",".join(user_context.get("diet", [])),  # e.g., vegan
+        "exclude": ",".join(user_context.get("exclude", [])),  # e.g., cheese
+        "targetCalories": user_context.get("targetCalories", 2000),
         "apiKey": SPOONACULAR_API_KEY
     }
 
-    if "targetCalories" in preferences:
-        params["targetCalories"] = preferences["targetCalories"]
-    if "exclude" in preferences:
-        params["exclude"] = ",".join(preferences["exclude"])
-    if "diet" in preferences:
-        params["diet"] = preferences["diet"][0]  # Spoonacular only takes one
-    if "cuisine" in preferences:
-        params["cuisine"] = preferences["cuisine"][0]
-    if "includeIngredients" in preferences:
-        params["includeIngredients"] = ",".join(preferences["includeIngredients"])
-
-    print("📦 Requesting meal plan with:", params)  # For debugging
-
-    response = requests.get(f"{BASE_URL}/mealplanner/generate", params=params)
+    response = requests.get(url, params=params)
     if response.status_code == 200:
         data = response.json()
-        return format_meal_plan(data)
+        return data.get("week", {})  # return weekly plan
     else:
-        return f"❌ Failed to get meal plan: {response.text}"
-
+        print("Error:", response.text)
+        return {"error": "Failed to fetch meal plan."}
 
 # Format the meal plan output
-def format_meal_plan(data):
-    response = "📅 **Weekly Meal Plan**:\n"
-    for day in data["week"]:
-        day_data = data["week"][day]
-        response += f"\n📆 {day.capitalize()}:\n"
-        for meal in day_data["meals"]:
-            response += f"- 🍽️ {meal['title']} (ready in {meal['readyInMinutes']} mins)\n"
-    return response
+def format_meal_plan(week_data):
+    if not week_data:
+        return "😞 No meal plan found for your preferences."
+
+    output = "📅 **Your Weekly Meal Plan**:\n"
+    for day, info in week_data.items():
+        output += f"\n**{day.capitalize()}**:\n"
+        for meal in info["meals"]:
+            output += f"- 🍽️ {meal['title']} ({meal['readyInMinutes']} mins) → [View Recipe]({meal['sourceUrl']})\n"
+    return output
+
+
 
 def get_substitute_suggestions(ingredient: str, reason: str = "general") -> str:
     prompt = f"""
