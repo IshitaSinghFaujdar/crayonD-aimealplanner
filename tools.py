@@ -5,6 +5,7 @@ from datetime import datetime
 from preference_matcher import match_preferences
 import requests
 import json
+import random
 from preference_matcher import get_embedding,cosine_similarity
 from typing import Tuple
 from config import SUPABASE_KEY,SUPABASE_URL,GOOGLE_API_KEY,SPOONACULAR_API_KEY
@@ -17,7 +18,7 @@ BASE_URL = "https://api.spoonacular.com"
 def detect_tool_llm(prompt: str, context: str) -> str:
     system_prompt = """
 You are an intelligent tool router for a chatbot. Based on user input and recent context, respond with one of the following tools ONLY:
-- meal_planner
+- weekly_meal_planner
 - substitute_finder
 - quick_meal_finder
 - food_health_explainer
@@ -37,40 +38,38 @@ Return ONLY the tool name. Do NOT include explanations.
 def quick_meal_finder(user_context):
     print("Fetching quick meal suggestions...")
 
-    # Build query for Spoonacular API with user preferences
     url = f"{BASE_URL}/recipes/complexSearch"
     params = {
-        "includeIngredients": ",".join(user_context["includeIngredients"]),
-        "diet": ",".join(user_context["diet"]),
-        "maxReadyTime": user_context["maxReadyTime"],
-        "excludeIngredients": ",".join(user_context["exclude"]),
-        "targetCalories": user_context["targetCalories"],
+        "includeIngredients": ",".join(user_context.get("includeIngredients", [])),
+        "diet": ",".join(user_context.get("diet", [])),
+        "maxReadyTime": user_context.get("maxReadyTime", 30),
+        "excludeIngredients": ",".join(user_context.get("exclude", [])),
+        "targetCalories": user_context.get("targetCalories", ""),
         "number": 3,
+        "cuisine": ",".join(user_context.get("cuisine", [])),
         "apiKey": SPOONACULAR_API_KEY
     }
-    print("\nFetching recipes.")
+
+
     response = requests.get(url, params=params)
     if response.status_code == 200:
         meal_data = response.json().get('results', [])
+        if not meal_data:
+            return f"❌ No recipes found for your preferred cuisine ({', '.join(user_context['cuisine'])}). Please try adjusting your preferences."
+        
         recipes = []
-        print("\nRecieved recipes.")
-
-        # Get full details of each recipe
         for recipe in meal_data:
             recipe_id = recipe["id"]
             recipe_url = f"{BASE_URL}/recipes/{recipe_id}/information"
             recipe_details = requests.get(recipe_url, params={"apiKey": SPOONACULAR_API_KEY}).json()
-            print("\nfetching full recipe.")
-            # Format the recipe details
             formatted_recipe = {
+                "id": recipe_details["id"],
                 "title": recipe_details["title"],
                 "image": recipe_details["image"],
                 "ingredients": [ingredient["name"] for ingredient in recipe_details["extendedIngredients"]],
                 "instructions": recipe_details["instructions"]
             }
-            print("formatting..")
             recipes.append(formatted_recipe)
-
         return recipes
     else:
         return {"error": "Failed to fetch meal suggestions."}
@@ -87,51 +86,133 @@ def format_quick_meals(recipes):
     return output
 
 
+def fetch_nutritional_data(food_description: str) -> str:
+    """
+    Fetch nutritional data for a given food item from the Spoonacular API.
 
-def food_health_explainer(food_description, health_context):
-    prompt = f"""
-Explain how the following food affects the body, especially considering {health_context if health_context else 'general health'}:
-Food: {food_description}
+    :param food_description: The name of the food to fetch nutrition data for.
+    :return: A string containing the nutritional breakdown.
+    """
+    # URL for the food nutrition endpoint
+    url = f"{BASE_URL}/food/ingredients/{food_description}/nutritionWidget.json"
 
-Include:
-- Nutritional breakdown
-- Ayurvedic interpretation (Vata/Pitta/Kapha, heating vs cooling)
-- How it helps or harms the health context
-- Suggestions to improve or tweak it
-"""
-    try:
-        response = model.generate_content(prompt)
-        return response.text.strip()
-    except Exception as e:
-        return f"❌ Failed to explain food health context: {e}"
-
-# Call Spoonacular Meal Planner API
-def get_meal_plan(user_context):
-    print("Fetching weekly meal plan...")
-
-    url = f"{BASE_URL}/mealplanner/generate"
+    # Parameters to pass to the API
     params = {
-        "timeFrame": "week",
-        "diet": ",".join(user_context.get("diet", [])),  # e.g., vegan
-        "exclude": ",".join(user_context.get("exclude", [])),  # e.g., cheese
-        "targetCalories": user_context.get("targetCalories", 2000),
         "apiKey": SPOONACULAR_API_KEY
     }
 
+    # Make the request to the Spoonacular API
     response = requests.get(url, params=params)
+
     if response.status_code == 200:
-        data = response.json()
-        return data.get("week", {})  # return weekly plan
+        nutrition_data = response.json()
+
+        # Extracting relevant nutritional data
+        nutritional_breakdown = f"""
+        **Nutritional Information for {food_description}:**
+        - Calories: {nutrition_data['calories']} kcal
+        - Protein: {nutrition_data['protein']} g
+        - Carbs: {nutrition_data['carbs']} g
+        - Fat: {nutrition_data['fat']} g
+        - Fiber: {nutrition_data['fiber']} g
+        - Sugars: {nutrition_data['sugars']} g
+        - Sodium: {nutrition_data['sodium']} mg
+        """
+        return nutritional_breakdown
     else:
-        print("Error:", response.text)
-        return {"error": "Failed to fetch meal plan."}
+        return f"❌ Failed to fetch nutritional data for {food_description}. Please try again later."
+    
+def food_health_explainer(food_description, health_context):
+    # Step 1: Use API for nutritional data
+    nutrition_data = fetch_nutritional_data(food_description)  # API call
+    
+    # Step 2: Use Gemini for Ayurvedic/Health context
+    gemini_prompt = f"""
+    Explain how {food_description} affects {health_context}. 
+    Nutritional info: {nutrition_data}
+    Provide Ayurvedic interpretation and health benefits.
+    """
+    gemini_response = model.generate_content(gemini_prompt)
+    
+    # Combine both results
+    final_explanation = f"Nutrition: {nutrition_data}\n\n{gemini_response.text.strip()}"
+    return final_explanation
+
+# Call Spoonacular Meal Planner API
+def weekly_meal_planner(user_context):
+    print("Generating your weekly meal plan...")
+    
+    # Fetch meals based on preferences
+    days_of_week = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+    meals_for_the_week = {}
+    
+    for i, day in enumerate(days_of_week): # Loop over each day of the week (0 - 6)
+        daily_meals = []
+        print(f"Figuring out 'your kinda' meal for {day}")
+        
+        # Meal types: breakfast, lunch, dinner, snack
+        for meal_type in ["breakfast", "lunch", "dinner", "snack"]:
+            # Check user's meal preferences
+            print(f"Your {meal_type} is in the oven.")
+            meal_preferences = {
+                "diet": ",".join(user_context.get("diet", [])),
+                "goal": ",".join(user_context.get("goal", [])),
+                "cuisine": ",".join(user_context.get("cuisine", [])),
+                "excludeIngredients": ",".join(user_context.get("exclude", [])),
+                "includeIngredients": ",".join(user_context.get("includeIngredients", [])),
+                "maxReadyTime": user_context.get("maxReadyTime", 30),  # fallback to 30 mins
+                "mealType": meal_type,
+                "cookingStyle": ",".join(user_context.get("cookingStyle", [])),
+                "appliance": ",".join(user_context.get("appliance", [])),
+                "spiceLevel": ",".join(user_context.get("spiceLevel", [])),
+                "budget": ",".join(user_context.get("budget", [])),
+                "apiKey": SPOONACULAR_API_KEY
+            }
+            
+
+            # Adjust preferences further based on the day (optional: you could make meals rotate)
+            daily_meals.append(get_meal_for_day(meal_preferences))
+        
+        # Add the daily meals to the weekly plan
+        meals_for_the_week[day] = {"meals": daily_meals}
+    
+    return meals_for_the_week
+
+def get_meal_for_day(meal_preferences):
+    # Sample request to Spoonacular API or similar service with dynamic preferences
+    url = f"{BASE_URL}/recipes/complexSearch"
+    response = requests.get(url, params=meal_preferences)
+    
+    if response.status_code == 200:
+        meal_data = response.json().get('results', [])
+        if not meal_data:
+            return {"error": "No meals found for today's preferences from spoonacular API."}
+        
+        # Select a random meal (you can apply further logic for this)
+        recipe = random.choice(meal_data)
+        recipe_id = recipe["id"]
+        recipe_url = f"{BASE_URL}/recipes/{recipe_id}/information"
+        recipe_details = requests.get(recipe_url, params={"apiKey": SPOONACULAR_API_KEY}).json()
+        
+        formatted_recipe = {
+            "title": recipe_details["title"],
+            "readyInMinutes": recipe_details.get("readyInMinutes", "-"),
+            "sourceUrl": recipe_details.get("sourceUrl", "#"),
+            "image": recipe_details["image"],
+            "ingredients": [ingredient["name"] for ingredient in recipe_details["extendedIngredients"]],
+            "instructions": recipe_details["instructions"]
+        }
+        return formatted_recipe
+    else:
+        return {"error": "Failed to fetch meal suggestions for this day from spoonacular API."}
+
 
 # Format the meal plan output
-def format_meal_plan(week_data):
+def format_meal_plan(week_data, meals_per_day=3):
     if not week_data:
         return "😞 No meal plan found for your preferences."
 
-    output = "📅 **Your Weekly Meal Plan**:\n"
+    output = f"📅 **Your Weekly Meal Plan** ({meals_per_day} meals/day):\n"
     for day, info in week_data.items():
         output += f"\n**{day.capitalize()}**:\n"
         for meal in info["meals"]:
@@ -139,26 +220,53 @@ def format_meal_plan(week_data):
     return output
 
 
+def fetch_substitutes_from_api(ingredient: str) -> str:
+    """
+    Fetch ingredient substitutes from the Spoonacular API.
+
+    :param ingredient: The ingredient for which substitutes are needed.
+    :return: A string with suggested substitutes and their details.
+    """
+    # URL for the ingredient substitution endpoint
+    url = f"{BASE_URL}/food/ingredients/substitute"
+
+    # Parameters to pass to the API
+    params = {
+        "ingredientName": ingredient,
+        "apiKey": SPOONACULAR_API_KEY
+    }
+
+    # Make the request to the Spoonacular API
+    response = requests.get(url, params=params)
+
+    if response.status_code == 200:
+        substitutes_data = response.json()
+
+        # Check if substitutes are found
+        if 'substitutes' in substitutes_data and substitutes_data['substitutes']:
+            substitutes = substitutes_data['substitutes']
+            substitute_list = "\n".join([f"- {substitute}" for substitute in substitutes])
+            return f"**Substitutes for {ingredient}:**\n{substitute_list}"
+        else:
+            return f"❌ No substitutes found for {ingredient}. Please try again later."
+    else:
+        return f"❌ Failed to fetch substitutes for {ingredient}. Please try again later."
 
 def get_substitute_suggestions(ingredient: str, reason: str = "general") -> str:
-    prompt = f"""
-You are a smart ingredient substitution expert for recipes. Suggest replacements for the ingredient: **{ingredient}**
-
-Reason: {reason}
-
-Include:
-- 2 to 3 substitution options
-- How each one affects **taste**, **nutrition**, and **cooking process**
-- Whether it's suitable for hormone balance / PCOD (if applicable)
-- Ayurvedic compatibility (heating/cooling, Vata/Pitta/Kapha)
-
-Make it concise, easy to understand, and helpful for someone cooking at home.
-"""
-    try:
-        response = model.generate_content(prompt)
-        return response.text.strip()
-    except Exception as e:
-        return f"❌ Failed to fetch substitutes: {e}"
+    # Step 1: Use API for ingredient substitutes
+    substitute_data = fetch_substitutes_from_api(ingredient)  # API call
+    
+    # Step 2: Use Gemini to explain benefits
+    gemini_prompt = f"""
+    Suggest replacements for {ingredient} considering {reason}.
+    Substitutes: {substitute_data}
+    Explain the health benefits of each, including Ayurvedic compatibility.
+    """
+    gemini_response = model.generate_content(gemini_prompt)
+    
+    # Combine both results
+    final_suggestions = f"Substitutes: {substitute_data}\n\n{gemini_response.text.strip()}"
+    return final_suggestions
 
 
 import re

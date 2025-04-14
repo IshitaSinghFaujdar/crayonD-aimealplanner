@@ -23,6 +23,7 @@ def save_user_preferences(user_id, preferences):
         if isinstance(values, list):
             for val in values:
                 embedding = get_embedding(val)  # whatever method you're using
+                #print(f"\nEmbeddings: {embedding}")
                 supabase.table("user_preferences").insert({
                     "user_id": user_id,
                     "preference_type": pref_type,
@@ -31,12 +32,14 @@ def save_user_preferences(user_id, preferences):
                 }).execute()
         else:
             embedding = get_embedding(values)
+            #print(f"\nEmbeddings: {embedding}")
             supabase.table("user_preferences").insert({
                 "user_id": user_id,
                 "preference_type": pref_type,
                 "preference_value": values,
                 "embedding": embedding
             }).execute()
+        print("\nPreferences updated")
 
 
 def get_user_preferences(user_id):
@@ -44,3 +47,18 @@ def get_user_preferences(user_id):
     if res.data:
         return res.data[-1]["preferences"]
     return None
+
+
+def store_liked_recipe(user_id, recipe_id, title, image_url, nutrition_info):
+    response = supabase.table('liked_recipes').insert({
+        "user_id": user_id,
+        "recipe_id": recipe_id,
+        "title": title,
+        "image_url": image_url,
+        "nutrition_info": nutrition_info  # Store as JSON
+    }).execute()
+    
+    if response.status_code == 201:
+        return "Recipe stored successfully!"
+    else:
+        return f"Error: {response.message}"

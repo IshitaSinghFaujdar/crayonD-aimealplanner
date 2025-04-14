@@ -5,7 +5,7 @@ def signup(email, password):
     if res.user:
         print("✅ Signup successful. Check your email to confirm.")
     else:
-        print("❌ Signup failed:", res)
+        print("❌ Signup failed:", res.get("error") or res)
 
 def login(email, password):
     res = supabase.auth.sign_in_with_password({"email": email, "password": password})

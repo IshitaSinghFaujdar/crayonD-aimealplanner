@@ -1,114 +1,102 @@
-import os
-import google.generativeai as genai
-from supabase import create_client, Client
-from datetime import datetime
-from preference_matcher import match_preferences
+import uuid
+import random
 import requests
-import json
-from tools import format_quick_meals, quick_meal_finder, get_meal_plan, format_meal_plan, get_substitute_suggestions, food_health_explainer, extract_ingredient_and_reason
+from sklearn.metrics.pairwise import cosine_similarity
 
-# Initialize API Keys (Use your environment variables or mock for testing)
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-model = genai.GenerativeModel("gemini-1.5-pro-002")
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-BASE_URL = "https://api.spoonacular.com"
-SPOONACULAR_API_KEY = os.getenv("SPOONACULAR_API_KEY")
-
-# Mock user preferences (for testing)
-user_context = {
-    "diet": ["vegan"],
-    "maxReadyTime": 30,
-    "includeIngredients": ["tomato", "onion", "garlic"],
-    "targetCalories": 1200,
-    "exclude": ["cheese"],
-    "health_context": "PCOD"
+# Mocking the PREFERENCE_LABELS to simulate your environment
+PREFERENCE_LABELS = {
+    "exclude": ["dairy", "gluten", "sugar", "nuts", "egg", "soy", "red meat", "seafood", "shellfish", "pork", "corn", "alcohol", "spicy", "caffeine", "mushrooms", "onions", "garlic"],
+    "diet": ["vegan", "vegetarian", "pescatarian", "paleo", "keto", "low carb", "low fat", "high protein", "whole30", "flexitarian", "diabetic", "dash diet", "raw", "intermittent fasting", "mediterranean"],
+    "goal": ["weight loss", "lose weight", "cutting", "slim down", "fat loss", "muscle gain", "bulk up", "maintenance", "improve energy", "balance hormones", "reduce inflammation", "detox"],
+    "cuisine": ["indian", "north indian", "south indian", "italian", "mexican", "chinese", "thai", "japanese", "korean", "french", "greek", "mediterranean", "american", "middle eastern", "spanish", "lebanese"],
+    "includeIngredients": ["chicken", "mutton", "beef", "paneer", "tofu", "lentils", "beans", "quinoa", "rice", "broccoli", "spinach", "cauliflower", "sweet potato", "avocado", "eggs", "milk", "cheese", "nuts", "seeds", "banana", "apple", "berries", "mango", "yogurt", "oats", "chia seeds"],
+    "mealType": ["breakfast", "lunch", "dinner", "snack", "brunch", "dessert", "post workout", "pre workout", "light meal", "heavy meal"],
+    "cookingStyle": ["grilled", "baked", "steamed", "fried", "raw", "sautéed", "pressure cooked", "slow cooked", "stir fried", "roasted", "air fried"],
+    "allergy": ["gluten", "dairy", "egg", "soy", "nuts", "seafood", "shellfish", "sesame", "mustard", "sulfites", "lupin"],
+    "spiceLevel": ["mild", "medium", "spicy", "extra spicy"],
+    "budget": ["low budget", "affordable", "cheap meals", "moderate budget", "premium meals", "no budget limit"],
+    "time": ["quick meals", "15 minutes", "30 minutes", "1 hour", "slow cooked", "instant", "overnight"],
+    "appliance": ["oven", "air fryer", "instant pot", "pressure cooker", "stove top", "microwave", "blender", "no cook"]
 }
 
-# Mock user inputs to simulate interactions
-def test_quick_meal_finder():
-    print("Testing Quick Meal Finder...")
-    user_input = "I want quick meals with tomatoes, onion, and garlic."
-    print(f"User Input: {user_input}")
-    result = quick_meal_finder(user_context)
-    print(f"Quick Meal Finder Results: {result}")
-    print("-" * 40)
+# Sample embedding function (mock)
+def get_embedding(text):
+    # For this test, simply return a fixed value (a mock embedding)
+    return [random.random() for _ in range(300)]
 
-def test_meal_planner():
-    print("Testing Meal Planner...")
-    user_input = "Can you give me a weekly meal plan with vegan meals, excluding cheese, and targeting 1200 calories?"
-    print(f"User Input: {user_input}")
-    result = get_meal_plan(user_context)
-    print(f"Meal Planner Results: {result}")
-    print("-" * 40)
-
-def test_substitute_finder():
-    print("Testing Substitute Finder...")
-
-    # Simulating user input asking for milk substitute
-    user_input = "What can I use instead of milk for my diet?"
-    print(f"User Input: {user_input}")
+# Mock match_preferences function
+def match_preferences(user_input: str) -> dict:
+    print("\n--- Debugging match_preferences ---")
+    user_embedding = get_embedding(user_input)
+    preferences = {}
     
-    # Extract ingredient and reason
-    ingredient, reason = extract_ingredient_and_reason(user_input)
-    print(f"Extracted Ingredient: {ingredient}, Extracted Reason: {reason}")
+    for pref_type, values in PREFERENCE_LABELS.items():
+        for value in values:
+            sim = cosine_similarity([user_embedding], [get_embedding(value)])[0][0]
+            if sim > 0.65:  # Adjust threshold if needed
+                if pref_type not in preferences:
+                    preferences[pref_type] = []
+                preferences[pref_type].append(value)
     
-    # Get substitute suggestions
-    result = get_substitute_suggestions(ingredient, reason)
-    print(f"Substitute Suggestions: {result}")
-    print("-" * 40)
+    print(f"Preferences found: {preferences}")
+    return preferences
 
-def test_food_health_explainer():
-    print("Testing Food Health Explainer...")
-    # Simulating user asking about the effect of avocado on PCOD
-    user_input = "How does avocado affect PCOD?"
-    print(f"User Input: {user_input}")
+# Debug process_input function
+def process_input(user_input, user_email=None, user_id=None): 
+    print("\n--- Debugging process_input ---")
+    chat_history = []
+    user_context = {}
     
-    # Get health explanation
-    result = food_health_explainer("avocado", "PCOD")
-    print(f"Food Health Explanation: {result}")
-    print("-" * 40)
+    # Handle new chat command
+    if user_input.lower() == "new chat":
+        print("Starting a new chat session.")
+        new_id = str(uuid.uuid4())
+        return f"✨ Started a new chat session: {new_id[:8]}..."
+    
+    # Set chat_id if not already set
+    if "chat_id" not in user_context:
+        user_context["chat_id"] = str(uuid.uuid4())
+    
+    chat_id = user_context["chat_id"]
+    chat_history.append(f"User: {user_input}")
+    context_window = " ".join(chat_history[-10:])
+    
+    print(f"Context Window: {context_window}")
+    
+    prefs = match_preferences(context_window)
+    
+    print(f"Preferences from match_preferences: {prefs}")
+    if not isinstance(prefs, dict):
+        print("ERROR: prefs is not a dictionary!")
+    
+    # Save extracted preferences
+    if user_id:
+        print(f"Saving preferences for user: {user_id}")
+        # save_user_preferences(user_id, prefs)  # Simulate saving
 
-def test_extract_ingredient_and_reason():
-    print("Testing Extract Ingredient and Reason...")
+    for k, v in prefs.items():
+        if not v:
+            continue
+        if k not in user_context:
+            user_context[k] = v
+        elif isinstance(v, list):
+            user_context[k] = list(set(user_context[k] + v))
+        else:
+            user_context[k] = v
 
-    # Testing the ingredient extraction function with different user inputs
+    print(f"User context after processing preferences: {user_context}")
+    response = "✅ Preferences processed successfully."
+    
+    return response
 
-    # Input 1: Milk substitute
-    user_input_1 = "What can I use instead of milk for my diet?"
-    print(f"User Input: {user_input_1}")
-    ingredient_1, reason_1 = extract_ingredient_and_reason(user_input_1)
-    print(f"Extracted Ingredient: {ingredient_1}, Extracted Reason: {reason_1}")
-
-    # Input 2: Ingredient for PCOD
-    user_input_2 = "How does avocado affect PCOD?"
-    print(f"User Input: {user_input_2}")
-    ingredient_2, reason_2 = extract_ingredient_and_reason(user_input_2)
-    print(f"Extracted Ingredient: {ingredient_2}, Extracted Reason: {reason_2}")
-
-    # Input 3: Replace sugar
-    user_input_3 = "What can I use instead of sugar for my diet?"
-    print(f"User Input: {user_input_3}")
-    ingredient_3, reason_3 = extract_ingredient_and_reason(user_input_3)
-    print(f"Extracted Ingredient: {ingredient_3}, Extracted Reason: {reason_3}")
-
-    # Input 4: Replace gluten
-    user_input_4 = "Can I replace gluten with something for a gluten-free diet?"
-    print(f"User Input: {user_input_4}")
-    ingredient_4, reason_4 = extract_ingredient_and_reason(user_input_4)
-    print(f"Extracted Ingredient: {ingredient_4}, Extracted Reason: {reason_4}")
-    print("-" * 40)
-
+# Main function to test the flow
 def main():
-    print("Debugging Chatbot Functionalities")
-
-    # Run tests for each function
-    test_quick_meal_finder()
-    test_meal_planner()
-    test_substitute_finder()
-    test_food_health_explainer()
-    test_extract_ingredient_and_reason()
+    # Test case
+    user_input = "I want vegan and gluten-free meals for weight loss"
+    
+    # Test the flow with sample user input
+    response = process_input(user_input)
+    print(f"Response: {response}")
 
 if __name__ == "__main__":
     main()
