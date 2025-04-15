@@ -1,8 +1,14 @@
 from supabase import create_client
 from config import SUPABASE_URL, SUPABASE_KEY
-from preference_matcher import get_batch_embeddings
+from preference_matcher import get_batch_embeddings,cosine_similarity,PREFERENCE_LABELS
 from fastapi.concurrency import run_in_threadpool
+import numpy as np
+
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+
+def is_similar(embedding1, embedding2, threshold=0.95):
+    return cosine_similarity(embedding1, embedding2) > threshold
 
 def insert_chat_log(user_id, chat_id, role, message):
     supabase.table("chat_logs").insert({
@@ -18,22 +24,55 @@ def get_chat_history(user_id):
 
 def delete_chat(user_id, chat_id):
     supabase.table("chat_logs").delete().eq("user_id", user_id).eq("chat_id", chat_id).execute()
+    
+async def trim_old_preferences(user_id, max_per_type=20):
+    for pref_type in PREFERENCE_LABELS.keys():
+        response = supabase.table("user_preferences").select("*")\
+            .eq("user_id", user_id).eq("preference_type", pref_type)\
+            .order("created_at", desc=True).execute()
+        
+        data = response.data if response else []
+        if len(data) > max_per_type:
+            # Delete oldest
+            to_delete_ids = [pref["id"] for pref in data[max_per_type:]]
+            for pref_id in to_delete_ids:
+                supabase.table("user_preferences").delete().eq("id", pref_id).execute()
 
 async def save_user_preferences(user_id, preferences):
+    await trim_old_preferences(user_id)
     inserts = []
+    
+    # Fetch current user preferences
+    current_prefs_resp = supabase.table("user_preferences").select("*").eq("user_id", user_id).execute()
+    current_prefs = current_prefs_resp.data if current_prefs_resp else []
+
     for pref_type, values in preferences.items():
         if not isinstance(values, list):
             values = [values]
         embeddings = get_batch_embeddings(values)
+
         for val, emb in zip(values, embeddings):
-            inserts.append({
-                "user_id": user_id,
-                "preference_type": pref_type,
-                "preference_value": val,
-                "embedding": emb
-            })
-    await run_in_threadpool(lambda: supabase.table("user_preferences").insert(inserts).execute())
-    print("Preferences updated")
+            should_add = True
+            for existing in current_prefs:
+                if existing["preference_type"] == pref_type:
+                    existing_emb = np.array(existing["embedding"])
+                    if is_similar(existing_emb, emb):
+                        should_add = False
+                        break
+            if should_add:
+                inserts.append({
+                    "user_id": user_id,
+                    "preference_type": pref_type,
+                    "preference_value": val,
+                    "embedding": emb
+                })
+
+    if inserts:
+        await run_in_threadpool(lambda: supabase.table("user_preferences").insert(inserts).execute())
+        print("Preferences updated...")
+    else:
+        print("No new preferences to insert.")
+
 
 
 def get_user_preferences(user_id):

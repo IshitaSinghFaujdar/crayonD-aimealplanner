@@ -143,7 +143,6 @@ def cosine_similarity(vec1, vec2) -> float:
     return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
 
 def match_preferences(user_input: str) -> dict:
-    print("Fetching your preferences...")
     user_embedding = get_embedding(user_input)
     preferences = {}
     for pref_type, val_embeds in LABEL_EMBEDDINGS.items():
