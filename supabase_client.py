@@ -3,6 +3,7 @@ from config import SUPABASE_URL, SUPABASE_KEY
 from preference_matcher import get_batch_embeddings,cosine_similarity,PREFERENCE_LABELS
 from fastapi.concurrency import run_in_threadpool
 import numpy as np
+import json
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -55,7 +56,10 @@ async def save_user_preferences(user_id, preferences):
             should_add = True
             for existing in current_prefs:
                 if existing["preference_type"] == pref_type:
-                    existing_emb = np.array(existing["embedding"])
+                    embedding_raw=existing["embedding"]
+                    if isinstance(embedding_raw,str):
+                        embedding_raw= json.loads(embedding_raw)
+                    existing_emb = np.array(embedding_raw, dtype=np.float32)
                     if is_similar(existing_emb, emb):
                         should_add = False
                         break

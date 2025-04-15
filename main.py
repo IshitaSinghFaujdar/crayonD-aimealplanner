@@ -4,11 +4,10 @@ from supabase_client import save_user_preferences,insert_chat_log
 from supabase import create_client, Client
 from preference_matcher import match_preferences
 import asyncio
+from debug2_2 import search_recipes
 from tools import (
-    quick_meal_finder, 
-    weekly_meal_planner,
     get_substitute_suggestions, extract_ingredient_and_reason,
-    food_health_explainer, detect_tool_llm
+    fetch_nutritional_data, detect_tool_llm
 )
 import uuid
 # Config
@@ -43,23 +42,6 @@ async def process_input(user_input, user_email=None, user_id=None):
     chat_history.append(f"User: {user_input}")
     print("Fetching short term context...")
     context_window = " ".join(chat_history[-10:])
-    prefs = match_preferences(context_window)
-    print("\npreference\n")
-    print(prefs)
-
-    #print(f"Type of prefs: {type(prefs)}")
-    #print(f"Prefs: {prefs}")
-
-    for k, v in prefs.items():
-        if not v:
-            continue
-        if k not in user_context:
-            user_context[k] = v
-        elif isinstance(v, list):
-            user_context[k] = list(set(user_context[k] + v))
-
-        else:
-            user_context[k]=v
     tool = detect_tool_llm(user_input, context_window)
 
     # Initialize response variable
@@ -73,7 +55,24 @@ async def process_input(user_input, user_email=None, user_id=None):
     recipes_data = liked_recipes.data
     print("\nBased on your prompt,tool selected:\n")
     print(tool)
-    if tool not in ["general chat", "chat"] and prefs and user_id:
+    if tool not in ["general chat", "chat","food_health_explainer","substitute finder"] and user_id:
+        prefs = match_preferences(context_window)
+        print("\npreference\n")
+        print(prefs)
+
+        #print(f"Type of prefs: {type(prefs)}")
+        #print(f"Prefs: {prefs}")
+
+        for k, v in prefs.items():
+            if not v:
+                continue
+            if k not in user_context:
+                user_context[k] = v
+            elif isinstance(v, list):
+                user_context[k] = list(set(user_context[k] + v))
+
+            else:
+                user_context[k]=v
         new_keys = any(k for k, v in prefs.items() if k not in user_context or v != user_context[k])
         if new_keys:
             await save_user_preferences(user_id, prefs)
@@ -110,37 +109,20 @@ Be friendly, helpful, and responsive. You are a supportive food assistant.
                 
         except Exception as e:
             print("Oops I think I am slow:", e)
-    elif tool == "quick_meal_finder":
-        if "maxReadyTime" not in user_context:
-            time = input("⏱️ How many minutes do you have to cook? ")
-            try:
-                user_context["maxReadyTime"] = int(time)
-            except:
-                user_context["maxReadyTime"] = 45
-
-        if "cooking_skill" not in user_context:
-            skill = input("👩‍🍳 What's your cooking skill level? (beginner/intermediate/expert): ").lower()
-            user_context["cooking_skill"] = skill
-
-        meals = await quick_meal_finder(user_context)
-        response = meals
-
-    elif tool == "weekly_meal_planner":
-        if "meals_per_day" not in user_context:
-            mpd = input("🍽️ How many meals per day? (2/3): ")
-            user_context["meals_per_day"] = int(mpd) if mpd.isdigit() else 3
-
-        plan = await weekly_meal_planner(user_context)
-        response = plan
+    elif tool == "quick_meal_finder" or tool == "weekly_meal_planner":
+        # Search for recipes based on preferences and input
+        recipes = await search_recipes(user_context, user_input)
+        
+        response = f"Here are some recipe suggestions: {recipes}"
 
     elif tool == "substitute_finder":
-        ingredient, reason =await extract_ingredient_and_reason(user_input)
-        subs =await get_substitute_suggestions(ingredient, reason)
+        ingredient =await extract_ingredient_and_reason(user_input)
+        subs =await get_substitute_suggestions(ingredient,user_input)
         response = f"🧪 Substitutes: {subs}"
 
     elif tool == "food_health_explainer":
-        ingredient, reason =await extract_ingredient_and_reason(user_input)
-        explainer = await food_health_explainer(ingredient, reason)
+        ingredient=await extract_ingredient_and_reason(user_input)
+        explainer = await fetch_nutritional_data(ingredient,user_input)
         response = f"💡 Explainer: {explainer}"
 
     else:
