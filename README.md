@@ -73,12 +73,12 @@ venv\Scripts\activate        # or source venv/bin/activate on Linux/Mac
 pip install -r requirements.txt
 
 # Start backend
-python main.py
 
+uvicorn web_api:app --reload  
 
 cd frontend
 npm install
-npm run dev
+npm start    
 
 
 ## Future Plans
