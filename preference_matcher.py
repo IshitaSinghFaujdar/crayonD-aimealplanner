@@ -6,7 +6,7 @@ import os
 from typing import List, Tuple
 from fastapi.concurrency import run_in_threadpool
 client= genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))  # Set env var
-import json
+import json,asyncio
 
 STATIC_EMBEDDINGS_FILE = "label_embeddings.json"
 
@@ -32,7 +32,7 @@ PREFERENCE_LABELS = {
         "mediterranean", "american", "middle eastern", "spanish", "lebanese"
     ],
     "includeIngredients": [
-        "chicken", "mutton", "beef", "carrot","pork", "turkey", "duck", "salmon", "tuna", "shrimp", "crab", "lobster",
+        "chicken", "mutton", "beef", "carrot","pork", "turkey", "duck", "salmon", "tuna", "shrimp", "crab", "lobster","capsicum"
         "paneer", "tofu", "tempeh", "seitan", "lentils", "black beans", "kidney beans", "chickpeas", "soybeans",
         "quinoa", "rice", "brown rice", "basmati rice", "jasmine rice", "wild rice", "barley", "millet", "bulgur",
         "oats", "steel-cut oats", "rolled oats", "chia seeds", "flax seeds", "hemp seeds", "pumpkin seeds", "sunflower seeds",
@@ -103,6 +103,9 @@ def get_batch_embeddings(texts: List[str]) -> List[List[float]]:
         config=types.EmbedContentConfig(task_type="SEMANTIC_SIMILARITY")
     )
     return [e.values for e in response.embeddings]
+async def get_batch_embeddings_async(texts: List[str]) -> List[List[float]]:
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: get_batch_embeddings(texts))
 
 # Precompute only once and save to file
 def cache_label_embeddings():
@@ -144,10 +147,13 @@ def cosine_similarity(vec1, vec2) -> float:
 
 def match_preferences(user_input: str) -> dict:
     user_embedding = get_embedding(user_input)
+    SIMILARITY_THRESHOLD = 0.75
+    #print("user embeddings")
+    #print(user_embedding)
     preferences = {}
     for pref_type, val_embeds in LABEL_EMBEDDINGS.items():
         for value, embedding in val_embeds.items():
             sim = cosine_similarity(user_embedding, embedding)
-            if sim > 0.652:
+            if sim > SIMILARITY_THRESHOLD :
                 preferences.setdefault(pref_type, []).append(value)
     return preferences

@@ -26,8 +26,7 @@ def start_chat(email, user_id):
           "- Weekly Meal Planner\n"
           "- Quick Meal Recipes\n"
           "- Ingredient Substituter\n"
-          "- Item Nutrition Info\n"
-          "If at any point you like a recipe, you can say things like 'i like this', 'save this', 'bookmark this'.\n")
+          "- Item Nutrition Info\n")
 
     start_new_chat()
     # current_recipe = None  # Uncomment and re-enable save flow when needed
