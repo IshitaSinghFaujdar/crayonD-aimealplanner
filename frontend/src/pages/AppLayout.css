@@ -1,0 +1,161 @@
+/* AppLayout.css - Upgraded Styling */
+
+body {
+    margin: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #eaf1f9;
+  }
+  
+  .app-container {
+    display: flex;
+    height: 100vh;
+    background: #f4f6fa;
+  }
+  
+  .sidebar {
+    width: 280px;
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(10px);
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.05);
+    border-right: 1px solid #e0e0e0;
+    padding: 24px 16px;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .new-chat-btn {
+    padding: 14px;
+    background-color: #005ce6;
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 20px;
+    transition: background 0.3s ease;
+  }
+  
+  .new-chat-btn:hover {
+    background-color: #0041b3;
+  }
+  
+  .chat-history {
+    flex-grow: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .chat-title {
+    background: #f2f4f8;
+    padding: 12px 16px;
+    border-radius: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    transition: background 0.3s ease, transform 0.2s ease;
+  }
+  
+  .chat-title:hover {
+    background: #e0e7ff;
+    transform: scale(1.01);
+  }
+  
+  .chat-title.active {
+    background: #005ce6;
+    color: white;
+  }
+  
+  .chat-title.active .delete-chat-btn {
+    color: white;
+  }
+  
+  .delete-chat-btn {
+    background: none;
+    border: none;
+    color: #777;
+    font-size: 16px;
+    cursor: pointer;
+  }
+  
+  .delete-chat-btn:hover {
+    color: #ff4d4d;
+  }
+  
+  .chat-area {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+  }
+  
+  .messages {
+    flex-grow: 1;
+    padding: 24px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  .message {
+    max-width: 65%;
+    padding: 14px 18px;
+    border-radius: 18px;
+    font-size: 15px;
+    line-height: 1.6;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+  }
+  
+  .message.user {
+    align-self: flex-end;
+    background: #005ce6;
+    color: white;
+  }
+  
+  .message.ai {
+    align-self: flex-start;
+    background: #f1f3f5;
+    color: #333;
+  }
+  
+  .input-area {
+    display: flex;
+    padding: 16px;
+    border-top: 1px solid #ddd;
+    background-color: #fafafa;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.03);
+  }
+  
+  .input-area input {
+    flex-grow: 1;
+    padding: 14px 16px;
+    font-size: 15px;
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    outline: none;
+    transition: border 0.2s ease;
+  }
+  
+  .input-area input:focus {
+    border-color: #005ce6;
+  }
+  
+  .input-area button {
+    padding: 14px 22px;
+    background-color: #005ce6;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    margin-left: 10px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background 0.3s ease;
+  }
+  
+  .input-area button:hover {
+    background-color: #0041b3;
+  }
+  
