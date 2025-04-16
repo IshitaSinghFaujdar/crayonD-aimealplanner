@@ -1,22 +1,24 @@
 // src/pages/SignupPage.jsx
 import React, { useState } from "react";
 import axios from "axios";
+import { useNavigate } from "react-router-dom";
 
 const SignupPage = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState(null);
+  const navigate = useNavigate();
 
   const handleSignup = async (e) => {
     e.preventDefault();
-
     try {
       const response = await axios.post("http://127.0.0.1:8000/signup", {
         email,
         password,
       });
       console.log("Signup success:", response.data);
-      // Redirect to login or chat page
+      alert("Signed up successfully! Please log in.");
+      navigate("/"); // or "/login" if that’s your route
     } catch (err) {
       setError("Signup failed. Please try again.");
       console.error(err);
@@ -25,6 +27,9 @@ const SignupPage = () => {
 
   return (
     <section>
+      {[...Array(400)].map((_, i) => (
+        <span key={i}></span>
+      ))}
       <div className="signin">
         <div className="content">
           <h2>AI Meal Planner</h2>

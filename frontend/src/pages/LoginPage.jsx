@@ -67,7 +67,9 @@ const LoginPage = () => {
               <i>Password</i>
             </div>
             <div className="links">
-            <a onClick={() => navigate("/reset")}>Forgot Password</a>
+            <a onClick={() => navigate("/reset")} style={{ cursor: "pointer" }}>
+                Forgot Password?
+              </a>
             <a onClick={() => navigate("/signup")}>Signup</a>
             </div>
 
