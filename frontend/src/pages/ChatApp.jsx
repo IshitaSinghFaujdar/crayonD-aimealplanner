@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import "./AppLayout.css";
+import "./ChatApp.css";
 import ReactMarkdown from "react-markdown";
 import { FiTrash2 } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
@@ -52,24 +52,30 @@ const ChatApp = () => {
     });
 
     const reply = res.data.response;
-    const newMsgs = [...messages, { role: "user", text: message }, { role: "ai", text: reply }];
+    const newMsgs = [...messages, { role: "user", text: message }, { role: "bot", text: reply }];
     setMessages(newMsgs);
     setMessage("");
     fetchHistory();
+    console.log(newMsgs); 
   };
 
   const loadChat = (id) => {
-    setMessages([]);
+    const logs = chatLogs[id] || [];
+  
+    // Optional: just log once
+    console.log("All logs:", logs);
+  
+    // Convert logs into role-based messages
+    const sessionMsgs = logs.map(log => ({
+      role: log.role?.trim() === "bot" ? "bot" : "user",
+      text: log.message?.trim() || ""
+    }));
+  
     setChatId(id);
-    setTimeout(() => {
-      const logs = chatLogs[id] || [];
-      const sessionMsgs = logs.flatMap(log => [
-        { role: "user", text: log.message },
-        { role: "ai", text: log.response },
-      ]);
-      setMessages(sessionMsgs);
-    }, 50);
+    setMessages(sessionMsgs);
   };
+  
+  
 
   const renderChatTitle = (logs) => {
     const firstMsg = logs.find(log => log.message)?.message || "New Chat";
@@ -133,12 +139,20 @@ const ChatApp = () => {
 
       <div className="chat-area">
         <div className="messages">
-          {messages.map((msg, idx) => (
-            <div key={idx} className={`message ${msg.role}`}>
-              <span>{msg.text}</span>
-            </div>
-          ))}
-        </div>
+        {messages
+  .filter(msg => msg.text && msg.text.trim() !== "")
+  .map((msg, idx) => {
+    console.log(`[${msg.role}]`); // TEMP
+    return (
+      <div key={idx} 
+        className={`message ${msg.role === "user" ? "user-message" : "bot-message"}`}>
+        <ReactMarkdown>{msg.text}</ReactMarkdown>
+      </div>
+    );
+  })}
+
+      </div>
+
         <div className="input-area">
           <input
             value={message}

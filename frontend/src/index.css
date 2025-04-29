@@ -8,14 +8,18 @@
   font-family: 'Quicksand', sans-serif;
 }
 
-body {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 100vh;
-  background: #000;
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
   overflow: hidden;
 }
+
+body {
+  background: #000;
+}
+
 
 section {
   position: absolute;
